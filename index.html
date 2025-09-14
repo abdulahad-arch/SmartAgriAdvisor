@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AgriBot Bluetooth App</title>
+  <script src="cordova.js"></script>
+  <script src="cordova-plugin-bluetooth-serial/www/bluetoothSerial.js"></script>
+  <style>
+    body { font-family: Arial; padding: 15px; background: #f4f4f4; }
+    h2 { color: green; }
+    button, select { display: block; margin: 8px 0; padding: 10px; width: 100%; }
+    #sensors, #result { background: white; padding: 10px; margin-top: 10px; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h2>🌱 AgriBot Advisor (Bluetooth)</h2>
+
+  <button onclick="connect()">🔗 Connect ESP32</button>
+  <button onclick="sendCmd('readSensors')">📊 Take Soil Reading</button>
+  <button onclick="refresh()">🔄 Refresh Readings</button>
+
+  <h3>Sensor Data:</h3>
+  <div id="sensors">pH: -- | Moisture: -- | Temp: --</div>
+
+  <h3>Select Crop:</h3>
+  <select id="cropSelect"></select>
+  <button onclick="checkCrop()">✅ Check Suitability</button>
+  <button onclick="aiMode()">🤖 AI Mode (Auto Suggest)</button>
+  <div id="result">--</div>
+
+  <h3>Translator:</h3>
+  <input type="text" id="translateText" placeholder="Type text...">
+  <button onclick="translateText()">🌐 Translate</button>
+  <div id="translation"></div>
+
+  <h3>🎤 Voice Assistant:</h3>
+  <button onclick="startVoice()">🎙️ Speak</button>
+  <div id="voiceResult"></div>
+
+  <h3>🤖 Robot Control</h3>
+  <button onclick="sendCmd('forward')">⬆ Forward</button>
+  <button onclick="sendCmd('backward')">⬇ Backward</button>
+  <button onclick="sendCmd('left')">⬅ Left</button>
+  <button onclick="sendCmd('right')">➡ Right</button>
+  <button onclick="sendCmd('stop')">🛑 Stop</button>
+  <button onclick="sendCmd('dip')">⚙️ Dip Servo</button>
+  <button onclick="sendCmd('lift')">⚙️ Lift Servo</button>
+
+  <script>
+    let ph=0, moisture=0, temp=0;
+    let cropDB = {
+      "Wheat":{ph:[6,7.5], moist:[50,70], temp:[10,25]},
+      "Rice":{ph:[5,6.5], moist:[60,80], temp:[20,35]},
+      "Cotton":{ph:[5.8,8], moist:[40,60], temp:[21,30]},
+      "Maize":{ph:[5.5,7], moist:[50,65], temp:[18,27]},
+      "Mango":{ph:[5.5,7.5], moist:[40,60], temp:[24,35]},
+      "Chilli":{ph:[6,7], moist:[45,60], temp:[20,32]},
+      "Soybean":{ph:[6,7.5], moist:[50,70], temp:[20,30]},
+      "Tomato":{ph:[5.5,7.5], moist:[50,70], temp:[18,27]},
+      "Potato":{ph:[5,6], moist:[60,80], temp:[15,25]},
+      "Onion":{ph:[6,7.5], moist:[40,60], temp:[13,25]},
+      // 👉 Add until 50 crops in the same format
+    };
+
+    window.onload = () => {
+      let sel = document.getElementById("cropSelect");
+      Object.keys(cropDB).forEach(c => {
+        let opt=document.createElement("option");
+        opt.value=c; opt.innerText=c;
+        sel.appendChild(opt);
+      });
+    };
+
+    function connect() {
+      bluetoothSerial.list(devices=>{
+        if(devices.length>0){
+          bluetoothSerial.connect(devices[0].id,()=>{
+            alert("Connected to "+devices[0].name);
+            bluetoothSerial.subscribe("\n",data=>parseSensorData(data));
+          },()=>alert("Connection failed"));
+        }else alert("No Bluetooth devices!");
+      });
+    }
+
+    function sendCmd(cmd){ bluetoothSerial.write(cmd+"\n"); }
+    function refresh(){ sendCmd("readSensors"); }
+
+    function parseSensorData(data){
+      let parts=data.trim().split(",");
+      if(parts.length===3){
+        ph=parseFloat(parts[0]); moisture=parseFloat(parts[1]); temp=parseFloat(parts[2]);
+        document.getElementById("sensors").innerText=`pH: ${ph} | Moisture: ${moisture}% | Temp: ${temp}°C`;
+      }
+    }
+
+    function checkCrop(){
+      let crop=document.getElementById("cropSelect").value;
+      let req=cropDB[crop]; if(!req) return;
+      let okPH=ph>=req.ph[0]&&ph<=req.ph[1];
+      let okMoist=moisture>=req.moist[0]&&moisture<=req.moist[1];
+      let okTemp=temp>=req.temp[0]&&temp<=req.temp[1];
+      let result=(okPH&&okMoist&&okTemp)?`✅ Suitable for ${crop}`:`❌ Not suitable. Try: ${suggestCrops()}`;
+      document.getElementById("result").innerText=result;
+    }
+
+    function aiMode(){ document.getElementById("result").innerText="AI Suggestion: "+suggestCrops(); }
+
+    function suggestCrops(){
+      let suggestions=[];
+      for(let c in cropDB){
+        let r=cropDB[c];
+        if(ph>=r.ph[0]&&ph<=r.ph[1]&&moisture>=r.moist[0]&&moisture<=r.moist[1]&&temp>=r.temp[0]&&temp<=r.temp[1]) suggestions.push(c);
+      }
+      return suggestions.length?suggestions.join(", "):"No match";
+    }
+
+    async function translateText(){
+      let txt=document.getElementById("translateText").value;
+      let res=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(txt)}&langpair=en|hi`);
+      let json=await res.json();
+      document.getElementById("translation").innerText=json.responseData.translatedText;
+    }
+
+    function startVoice(){
+      let rec=new webkitSpeechRecognition();
+      rec.lang="en-US"; rec.start();
+      rec.onresult=e=>{
+        let speech=e.results[0][0].transcript;
+        document.getElementById("voiceResult").innerText="You said: "+speech;
+        if(speech.includes("forward")) sendCmd("forward");
+        if(speech.includes("stop")) sendCmd("stop");
+      };
+    }
+  </script>
+</body>
+</html>
