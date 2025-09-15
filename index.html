@@ -1,136 +1,227 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>AgriBot Bluetooth App</title>
-  <script src="cordova.js"></script>
-  <script src="cordova-plugin-bluetooth-serial/www/bluetoothSerial.js"></script>
-  <style>
-    body { font-family: Arial; padding: 15px; background: #f4f4f4; }
-    h2 { color: green; }
-    button, select { display: block; margin: 8px 0; padding: 10px; width: 100%; }
-    #sensors, #result { background: white; padding: 10px; margin-top: 10px; border-radius: 5px; }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Smart AgriAdvisor</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;background:#f7f7f7;color:#222}
+  header{background:#2b6cb0;color:white;padding:18px 14px;text-align:center;font-size:20px;font-weight:700}
+  .container{padding:14px;max-width:720px;margin:0 auto}
+  .card{background:white;padding:12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:12px}
+  label{display:block;font-weight:600;margin-bottom:6px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  button{background:#2b6cb0;color:white;border:none;padding:10px 12px;border-radius:6px;cursor:pointer}
+  button.secondary{background:#38a169}
+  button.gray{background:#718096}
+  select,input{padding:8px;border:1px solid #ddd;border-radius:6px;width:100%}
+  .status{font-weight:700;margin-top:6px}
+  .result{color:#c53030;font-weight:700;margin-top:8px}
+  .small{font-size:13px;color:#666}
+  .controls .btn{flex:1;min-width:110px}
+  .topline{display:flex;gap:8px;align-items:center}
+  pre {background:#0f1724;color:#e6eef8;padding:8px;border-radius:6px;overflow:auto}
+</style>
 </head>
 <body>
-  <h2>🌱 AgriBot Advisor (Bluetooth)</h2>
+<header>Smart AgriAdvisor (Web)</header>
+<div class="container">
 
-  <button onclick="connect()">🔗 Connect ESP32</button>
-  <button onclick="sendCmd('readSensors')">📊 Take Soil Reading</button>
-  <button onclick="refresh()">🔄 Refresh Readings</button>
+  <!-- ESP32 Connection -->
+  <div class="card">
+    <label>ESP32 Connection</label>
+    <div class="row">
+      <input id="espIp" placeholder="192.168.4.1" value="192.168.4.1"/>
+      <button id="btnConnect">Connect</button>
+      <button id="btnDisconnect" class="gray">Disconnect</button>
+    </div>
+    <div class="small">Connect phone & ESP32 to same network (or ESP32 AP mode).</div>
+    <span id="loadMsg" class="small"></span>
+  </div>
 
-  <h3>Sensor Data:</h3>
-  <div id="sensors">pH: -- | Moisture: -- | Temp: --</div>
+  <!-- Soil Readings -->
+  <div class="card">
+    <label>Soil Readings</label>
+    <div id="lblPH">pH: --</div>
+    <div id="lblMoist">Moisture: --</div>
+    <div id="lblTemp">Temp: --</div>
+    <div class="row" style="margin-top:8px">
+      <button id="btnTakeReading">Take Soil Reading</button>
+      <button id="btnRefreshReading" class="gray">Refresh Reading</button>
+    </div>
+  </div>
 
-  <h3>Select Crop:</h3>
-  <select id="cropSelect"></select>
-  <button onclick="checkCrop()">✅ Check Suitability</button>
-  <button onclick="aiMode()">🤖 AI Mode (Auto Suggest)</button>
-  <div id="result">--</div>
+  <!-- Crop Selection -->
+  <div class="card">
+    <label>Crop Selection</label>
+    <select id="cropSelect"><option value="">-- Load crops --</option></select>
+    <div class="row controls" style="margin-top:8px">
+      <button id="btnCheck" class="btn">Check Suitability</button>
+      <button id="btnAI" class="btn secondary">AI Mode (Top suggestions)</button>
+    </div>
+    <div id="lblResult" class="result"></div>
+  </div>
 
-  <h3>Translator:</h3>
-  <input type="text" id="translateText" placeholder="Type text...">
-  <button onclick="translateText()">🌐 Translate</button>
-  <div id="translation"></div>
+  <!-- 🌍 Translator -->
+  <div class="card">
+    <label>Translator (Advice)</label>
+    <div class="row">
+      <select id="langSelect">
+        <option value="en">English</option>
+        <option value="hi">Hindi</option>
+        <option value="te">Telugu</option>
+      </select>
+      <button id="btnTranslate">Translate</button>
+    </div>
+    <div id="lblTranslated" class="small"></div>
+  </div>
 
-  <h3>🎤 Voice Assistant:</h3>
-  <button onclick="startVoice()">🎙️ Speak</button>
-  <div id="voiceResult"></div>
+  <!-- ☁ Weather -->
+  <div class="card">
+    <label>Weather-based Advice</label>
+    <input id="city" placeholder="Enter City"/>
+    <button id="btnWeather">Get Weather Advice</button>
+    <div id="lblWeather" class="small"></div>
+  </div>
 
-  <h3>🤖 Robot Control</h3>
-  <button onclick="sendCmd('forward')">⬆ Forward</button>
-  <button onclick="sendCmd('backward')">⬇ Backward</button>
-  <button onclick="sendCmd('left')">⬅ Left</button>
-  <button onclick="sendCmd('right')">➡ Right</button>
-  <button onclick="sendCmd('stop')">🛑 Stop</button>
-  <button onclick="sendCmd('dip')">⚙️ Dip Servo</button>
-  <button onclick="sendCmd('lift')">⚙️ Lift Servo</button>
+  <!-- 💰 Profit Estimator -->
+  <div class="card">
+    <label>Profit Estimator</label>
+    <div class="row">
+      <input id="yieldInput" placeholder="Enter Yield (kg)" type="number"/>
+      <button id="btnProfit">Estimate Profit</button>
+    </div>
+    <div id="lblProfit" class="small"></div>
+  </div>
 
-  <script>
-    let ph=0, moisture=0, temp=0;
-    let cropDB = {
-      "Wheat":{ph:[6,7.5], moist:[50,70], temp:[10,25]},
-      "Rice":{ph:[5,6.5], moist:[60,80], temp:[20,35]},
-      "Cotton":{ph:[5.8,8], moist:[40,60], temp:[21,30]},
-      "Maize":{ph:[5.5,7], moist:[50,65], temp:[18,27]},
-      "Mango":{ph:[5.5,7.5], moist:[40,60], temp:[24,35]},
-      "Chilli":{ph:[6,7], moist:[45,60], temp:[20,32]},
-      "Soybean":{ph:[6,7.5], moist:[50,70], temp:[20,30]},
-      "Tomato":{ph:[5.5,7.5], moist:[50,70], temp:[18,27]},
-      "Potato":{ph:[5,6], moist:[60,80], temp:[15,25]},
-      "Onion":{ph:[6,7.5], moist:[40,60], temp:[13,25]},
-      // 👉 Add until 50 crops in the same format
-    };
+  <!-- Robot Controls -->
+  <div class="card">
+    <label>Robot Controls (Wi-Fi HTTP)</label>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn" data-act="forward">Forward</button>
+      <button class="btn" data-act="left">Left</button>
+      <button class="btn" data-act="stop">Stop</button>
+      <button class="btn" data-act="right">Right</button>
+      <button class="btn" data-act="backward">Backward</button>
+      <button class="btn" data-act="servoDip">Dip Servo</button>
+      <button class="btn" data-act="servoLift">Lift Servo</button>
+    </div>
+  </div>
 
-    window.onload = () => {
-      let sel = document.getElementById("cropSelect");
-      Object.keys(cropDB).forEach(c => {
-        let opt=document.createElement("option");
-        opt.value=c; opt.innerText=c;
-        sel.appendChild(opt);
-      });
-    };
+  <!-- Debug -->
+  <div class="card">
+    <label>Debug / Raw Response</label>
+    <pre id="debug">No data yet</pre>
+  </div>
 
-    function connect() {
-      bluetoothSerial.list(devices=>{
-        if(devices.length>0){
-          bluetoothSerial.connect(devices[0].id,()=>{
-            alert("Connected to "+devices[0].name);
-            bluetoothSerial.subscribe("\n",data=>parseSensorData(data));
-          },()=>alert("Connection failed"));
-        }else alert("No Bluetooth devices!");
-      });
-    }
+</div>
 
-    function sendCmd(cmd){ bluetoothSerial.write(cmd+"\n"); }
-    function refresh(){ sendCmd("readSensors"); }
+<script>
+/* ---- Crop DB ---- */
+let cropDB = []; 
+let phVal=0, moistVal=0, tempVal=0;
+let espConnected = false;
+let espUrl = "";
 
-    function parseSensorData(data){
-      let parts=data.trim().split(",");
-      if(parts.length===3){
-        ph=parseFloat(parts[0]); moisture=parseFloat(parts[1]); temp=parseFloat(parts[2]);
-        document.getElementById("sensors").innerText=`pH: ${ph} | Moisture: ${moisture}% | Temp: ${temp}°C`;
-      }
-    }
+function fallbackDB(){
+  cropDB = [
+    ["Wheat",6,7.5,40,15,20],["Rice",5.5,7,60,20,25],["Maize",5.5,7,50,18,18],
+    ["Tomato",5.5,7,30,20,30],["Potato",5.5,7,30,15,12],["Cotton",6,8,50,22,40]
+    // ... keep your 50 crops, add last column = avg price per kg
+  ];
+  populateCropSelect();
+  setStatus("Loaded fallback crops");
+}
+function populateCropSelect(){
+  const sel=document.getElementById('cropSelect');
+  sel.innerHTML="";
+  for(let row of cropDB){
+    const opt=document.createElement('option');
+    opt.value=row[0]; opt.text=row[0];
+    sel.appendChild(opt);
+  }
+}
+function setStatus(t){document.getElementById('loadMsg').innerText=t;}
 
-    function checkCrop(){
-      let crop=document.getElementById("cropSelect").value;
-      let req=cropDB[crop]; if(!req) return;
-      let okPH=ph>=req.ph[0]&&ph<=req.ph[1];
-      let okMoist=moisture>=req.moist[0]&&moisture<=req.moist[1];
-      let okTemp=temp>=req.temp[0]&&temp<=req.temp[1];
-      let result=(okPH&&okMoist&&okTemp)?`✅ Suitable for ${crop}`:`❌ Not suitable. Try: ${suggestCrops()}`;
-      document.getElementById("result").innerText=result;
-    }
+/* ---- ESP32 Connect ---- */
+document.getElementById('btnConnect').onclick=()=>{
+  const ip=document.getElementById('espIp').value.trim();
+  if(!ip){alert("Enter ESP32 IP");return;}
+  espUrl=ip.startsWith("http")?ip:"http://"+ip;
+  espConnected=true;setStatus("Connected to "+espUrl);
+};
+document.getElementById('btnDisconnect').onclick=()=>{espConnected=false;espUrl="";setStatus("Disconnected");};
 
-    function aiMode(){ document.getElementById("result").innerText="AI Suggestion: "+suggestCrops(); }
+async function callEsp(path){
+  if(!espConnected){alert("ESP32 not connected!");return null;}
+  try{const r=await fetch(espUrl+path);const txt=await r.text();document.getElementById('debug').innerText=txt;return txt;}
+  catch(e){document.getElementById('debug').innerText="ERROR: "+e;return null;}
+}
 
-    function suggestCrops(){
-      let suggestions=[];
-      for(let c in cropDB){
-        let r=cropDB[c];
-        if(ph>=r.ph[0]&&ph<=r.ph[1]&&moisture>=r.moist[0]&&moisture<=r.moist[1]&&temp>=r.temp[0]&&temp<=r.temp[1]) suggestions.push(c);
-      }
-      return suggestions.length?suggestions.join(", "):"No match";
-    }
+/* ---- Sensor Parse ---- */
+function parseSensorText(txt){
+  const nums=txt.match(/-?\d+(\.\d+)?/g);
+  if(nums&&nums.length>=3){phVal=parseFloat(nums[0]);moistVal=parseFloat(nums[1]);tempVal=parseFloat(nums[2]);}
+  document.getElementById('lblPH').innerText="pH: "+phVal;
+  document.getElementById('lblMoist').innerText="Moisture: "+moistVal;
+  document.getElementById('lblTemp').innerText="Temp: "+tempVal;
+}
+document.getElementById('btnTakeReading').onclick=async()=>{const t=await callEsp("/readSensors");if(t)parseSensorText(t);};
+document.getElementById('btnRefreshReading').onclick=async()=>{const t=await callEsp("/readSensors");if(t)parseSensorText(t);};
 
-    async function translateText(){
-      let txt=document.getElementById("translateText").value;
-      let res=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(txt)}&langpair=en|hi`);
-      let json=await res.json();
-      document.getElementById("translation").innerText=json.responseData.translatedText;
-    }
+/* ---- Crop Suitability ---- */
+document.getElementById('btnCheck').onclick=()=>{
+  const crop=document.getElementById('cropSelect').value;if(!crop){alert("Pick a crop");return;}
+  const row=cropDB.find(r=>r[0]==crop);if(!row)return;
+  const [n,minPH,maxPH,minM,minT]=row;
+  const ok=phVal>=minPH&&phVal<=maxPH&&moistVal>=minM&&tempVal>=minT;
+  document.getElementById('lblResult').innerText=ok?`✅ ${n} is Suitable`:`❌ ${n} Not Suitable`;
+};
+document.getElementById('btnAI').onclick=()=>{
+  const list=cropDB.filter(r=>phVal>=r[1]&&phVal<=r[2]&&moistVal>=r[3]&&tempVal>=r[4]).map(r=>r[0]);
+  document.getElementById('lblResult').innerText=list.length?"AI Suggests: "+list.slice(0,5).join(", "):"No matches";
+};
 
-    function startVoice(){
-      let rec=new webkitSpeechRecognition();
-      rec.lang="en-US"; rec.start();
-      rec.onresult=e=>{
-        let speech=e.results[0][0].transcript;
-        document.getElementById("voiceResult").innerText="You said: "+speech;
-        if(speech.includes("forward")) sendCmd("forward");
-        if(speech.includes("stop")) sendCmd("stop");
-      };
-    }
-  </script>
+/* ---- Translator ---- */
+document.getElementById('btnTranslate').onclick=async()=>{
+  const text=document.getElementById('lblResult').innerText;
+  const lang=document.getElementById('langSelect').value;
+  if(!text){alert("No text to translate!");return;}
+  try{
+    const res=await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${lang}`);
+    const data=await res.json();
+    document.getElementById('lblTranslated').innerText="🔄 "+data.responseData.translatedText;
+  }catch(e){document.getElementById('lblTranslated').innerText="Translation error";}
+};
+
+/* ---- Weather ---- */
+document.getElementById('btnWeather').onclick=async()=>{
+  const city=document.getElementById('city').value;
+  if(!city){alert("Enter city");return;}
+  try{
+    const apiKey="demo"; // replace with your OpenWeatherMap key
+    const res=await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`);
+    const d=await res.json();
+    const t=d.main.temp;const hum=d.main.humidity;
+    let advice="Weather: "+t+"°C, Humidity: "+hum+"%. ";
+    if(hum<40)advice+="Irrigation needed 💧"; else advice+="No irrigation needed ✅";
+    document.getElementById('lblWeather').innerText=advice;
+  }catch(e){document.getElementById('lblWeather').innerText="Weather fetch error";}
+};
+
+/* ---- Profit Estimator ---- */
+document.getElementById('btnProfit').onclick=()=>{
+  const crop=document.getElementById('cropSelect').value;
+  const yieldKg=parseFloat(document.getElementById('yieldInput').value);
+  if(!crop||!yieldKg){alert("Pick crop and enter yield");return;}
+  const row=cropDB.find(r=>r[0]==crop);
+  if(!row||row.length<6){document.getElementById('lblProfit').innerText="Rate not found";return;}
+  const price=row[5];const profit=yieldKg*price;
+  document.getElementById('lblProfit').innerText=`Est. Profit: ₹${profit} (at ₹${price}/kg)`;
+};
+
+/* Init */
+window.onload=fallbackDB;
+</script>
 </body>
 </html>
